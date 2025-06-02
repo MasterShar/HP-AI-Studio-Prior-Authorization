@@ -1,3 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prior Auth Model Inference</title>
+  <meta name="description" content="Invoke prior authorization model predictions.">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2rem; background: #f7f7f7; }
+    .container { background: white; padding: 2rem; border-radius: 8px; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 1rem; }
+    input[type="number"], select { width: 100%; padding: 0.5rem; margin-top: 0.25rem; }
+    button { margin-top: 2rem; padding: 0.75rem 1.5rem; font-size: 1rem; background: #006eff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    pre { background: #eee; padding: 1rem; margin-top: 2rem; white-space: pre-wrap; word-wrap: break-word; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Invoke Prior Auth Prediction Model</h2>
+    <form id="predict-form">
+      <label for="carrier">Carrier (encoded int):
+        <input type="number" id="carrier" name="Carrier" value="1" required>
+      </label>
+      <label for="year">Year:
+        <input type="number" id="year" name="Year" value="2024" required>
+      </label>
+      <label for="service-category">Service Category (encoded int):
+        <input type="number" id="service-category" name="Service category" value="1" required>
+      </label>
+      <label for="request">Request (encoded int):
+        <input type="number" id="request" name="Request" value="1" required>
+      </label>
+      <label for="code-type">Code Type (encoded int):
+        <input type="number" id="code-type" name="Code type" value="1" required>
+      </label>
+      <label for="num-requests">Number of Requests per Code:
+        <input type="number" step="any" id="num-requests" name="Number of requests per code" value="10" required>
+      </label>
+      <button type="submit" id="submit-btn">Submit</button>
+    </form>
+    <pre id="response"></pre>
+  </div>
+
+  <script>
+    const form = document.getElementById("predict-form");
+    const responseBox = document.getElementById("response");
+    const submitBtn = document.getElementById("submit-btn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      responseBox.textContent = "";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Loading...";
+
+      const formData = new FormData(form);
+      const input = {};
+      for (const [key, value] of formData.entries()) {
+        input[key] = [Number(value)];
+      }
+      const body = JSON.stringify({ inputs: input, params: {} });
+
+      // Use a relative path; proxy setup recommended for deployed platforms.
+      const API_ENDPOINT = "/api/invocations";
+
+      try {
+        const res = await fetch(API_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body
+        });
+        if (!res.ok) {
+          throw new Error(`Server responded with status ${res.status}`);
+        }
+        const data = await res.json();
+        responseBox.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        responseBox.textContent = "Error: " + err.message;
+        console.error(err);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit";
+      }
+    });
+  </script>
+</body>
+</html>
+</html>
+=======
 // This is a minimal React UI to send POST requests to your Swagger MLflow API
 // Replace `http://localhost:53933/invocations` with your deployed endpoint
 
