@@ -24,7 +24,7 @@ It includes features such as:
 
 ---
 
-## ⚙️ Environment Requirements
+## Environment Requirements
 
 This code is designed to run inside the HP AI Studio Deep Learning image and does not require external libraries or internet access.
 
@@ -36,7 +36,7 @@ This code is designed to run inside the HP AI Studio Deep Learning image and doe
 
 ---
 
-## 🧪 Workflow Overview
+## Workflow Overview
 
 1. Load & Clean Data
 2. Encode categorical business variables
