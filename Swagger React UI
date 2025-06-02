@@ -1,0 +1,458 @@
+// App.js
+import React, { useState, useEffect } from 'react';
+import SwaggerUI from 'swagger-ui-react';
+import 'swagger-ui-react/swagger-ui.css';
+import './App.css';
+
+// ML Model API Configuration
+const ML_API_BASE_URL = process.env.REACT_APP_ML_API_URL || 'https://localhost:53933';
+
+// Swagger/OpenAPI Specification for ML Model
+const swaggerSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Healthcare Prior Authorization ML Model API',
+    version: '1.0.0',
+    description: 'Machine Learning API for Prior Authorization Predictions',
+    contact: {
+      name: 'API Support',
+      email: 'support@healthcareml.com'
+    }
+  },
+  servers: [
+    {
+      url: ML_API_BASE_URL,
+      description: 'ML Model Server'
+    }
+  ],
+  paths: {
+    '/invocations': {
+      post: {
+        summary: 'Get Prior Authorization Prediction',
+        description: 'Submit authorization request for ML prediction',
+        operationId: 'getPrediction',
+        tags: ['Predictions'],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/PredictionRequest'
+              },
+              examples: {
+                'DME Request': {
+                  value: {
+                    carrier: 'Carrier A',
+                    year: 2023,
+                    service_category: 'DME',
+                    code: 'E0784',
+                    description: 'External Ambulatory Infusion Pump',
+                    num_requests: 10,
+                    diagnosis_codes: ['E11.9', 'E11.65'],
+                    urgency: 'urgent'
+                  }
+                },
+                'Drug Request': {
+                  value: {
+                    carrier: 'Carrier B',
+                    year: 2023,
+                    service_category: 'Prescription Drugs',
+                    code: 'J0180',
+                    description: 'Specialty medication',
+                    num_requests: 5,
+                    diagnosis_codes: ['M79.3'],
+                    urgency: 'routine'
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Successful prediction',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/PredictionResponse'
+                },
+                example: {
+                  prediction: 'approved',
+                  probability: 0.89,
+                  confidence: 'high',
+                  factors: [
+                    'Medical necessity established',
+                    'Policy requirements met',
+                    'Cost-effective treatment'
+                  ],
+                  processing_time_ms: 45
+                }
+              }
+            }
+          },
+          '400': {
+            description: 'Invalid request',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/Error'
+                }
+              }
+            }
+          },
+          '500': {
+            description: 'Server error',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/Error'
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/health': {
+      get: {
+        summary: 'Health Check',
+        description: 'Check if ML model service is running',
+        operationId: 'healthCheck',
+        tags: ['System'],
+        responses: {
+          '200': {
+            description: 'Service is healthy',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: {
+                      type: 'string',
+                      example: 'healthy'
+                    },
+                    model_version: {
+                      type: 'string',
+                      example: '1.0.0'
+                    },
+                    uptime: {
+                      type: 'string',
+                      example: '24h 15m'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/batch_invocations': {
+      post: {
+        summary: 'Batch Predictions',
+        description: 'Submit multiple requests for batch processing',
+        operationId: 'getBatchPredictions',
+        tags: ['Predictions'],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  requests: {
+                    type: 'array',
+                    items: {
+                      $ref: '#/components/schemas/PredictionRequest'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Batch predictions completed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    predictions: {
+                      type: 'array',
+                      items: {
+                        $ref: '#/components/schemas/PredictionResponse'
+                      }
+                    },
+                    total_processing_time_ms: {
+                      type: 'number'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  components: {
+    schemas: {
+      PredictionRequest: {
+        type: 'object',
+        required: ['carrier', 'year', 'service_category', 'code'],
+        properties: {
+          carrier: {
+            type: 'string',
+            description: 'Insurance carrier name',
+            enum: ['Carrier A', 'Carrier B', 'Carrier C', 'Carrier D', 'Other']
+          },
+          year: {
+            type: 'integer',
+            description: 'Year of request',
+            minimum: 2020,
+            maximum: 2025
+          },
+          service_category: {
+            type: 'string',
+            description: 'Type of service',
+            enum: ['DME', 'Prescription Drugs', 'Outpatient Med-Surg', 'Inpatient Med-Surg', 'Mental Health']
+          },
+          code: {
+            type: 'string',
+            description: 'Service or procedure code'
+          },
+          description: {
+            type: 'string',
+            description: 'Service description'
+          },
+          num_requests: {
+            type: 'integer',
+            description: 'Number of requests',
+            minimum: 1
+          },
+          diagnosis_codes: {
+            type: 'array',
+            items: {
+              type: 'string'
+            },
+            description: 'ICD-10 diagnosis codes'
+          },
+          urgency: {
+            type: 'string',
+            enum: ['routine', 'urgent', 'emergency'],
+            default: 'routine'
+          },
+          estimated_cost: {
+            type: 'number',
+            description: 'Estimated cost in USD'
+          }
+        }
+      },
+      PredictionResponse: {
+        type: 'object',
+        properties: {
+          prediction: {
+            type: 'string',
+            enum: ['approved', 'denied', 'need_more_info'],
+            description: 'ML model prediction'
+          },
+          probability: {
+            type: 'number',
+            minimum: 0,
+            maximum: 1,
+            description: 'Prediction probability'
+          },
+          confidence: {
+            type: 'string',
+            enum: ['low', 'medium', 'high'],
+            description: 'Confidence level'
+          },
+          factors: {
+            type: 'array',
+            items: {
+              type: 'string'
+            },
+            description: 'Key factors in decision'
+          },
+          processing_time_ms: {
+            type: 'number',
+            description: 'Processing time in milliseconds'
+          },
+          recommendation: {
+            type: 'string',
+            description: 'Recommended next steps'
+          }
+        }
+      },
+      Error: {
+        type: 'object',
+        properties: {
+          error: {
+            type: 'string',
+            description: 'Error message'
+          },
+          code: {
+            type: 'string',
+            description: 'Error code'
+          },
+          details: {
+            type: 'object',
+            description: 'Additional error details'
+          }
+        }
+      }
+    },
+    securitySchemes: {
+      ApiKeyAuth: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'X-API-Key'
+      }
+    }
+  },
+  security: [
+    {
+      ApiKeyAuth: []
+    }
+  ]
+};
+
+// Custom request interceptor for API calls
+const requestInterceptor = (req) => {
+  // Add custom headers if needed
+  req.headers['X-API-Key'] = process.env.REACT_APP_API_KEY || 'demo-key';
+  
+  // Handle CORS for local development
+  if (process.env.NODE_ENV === 'development') {
+    req.mode = 'cors';
+    req.credentials = 'include';
+  }
+  
+  return req;
+};
+
+// Main App Component
+function App() {
+  const [apiHealth, setApiHealth] = useState(null);
+  const [predictionResult, setPredictionResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Check API health on component mount
+  useEffect(() => {
+    checkApiHealth();
+  }, []);
+
+  const checkApiHealth = async () => {
+    try {
+      const response = await fetch(`${ML_API_BASE_URL}/health`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': process.env.REACT_APP_API_KEY || 'demo-key'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setApiHealth(data);
+      } else {
+        setApiHealth({ status: 'unhealthy', error: 'Failed to connect' });
+      }
+    } catch (error) {
+      setApiHealth({ status: 'error', error: error.message });
+    }
+  };
+
+  // Quick prediction test
+  const testPrediction = async () => {
+    setLoading(true);
+    try {
+      const testData = {
+        carrier: 'Carrier A',
+        year: 2023,
+        service_category: 'DME',
+        code: 'E0784',
+        description: 'External Ambulatory Infusion Pump',
+        num_requests: 10,
+        diagnosis_codes: ['E11.9'],
+        urgency: 'urgent',
+        estimated_cost: 5000
+      };
+
+      const response = await fetch(`${ML_API_BASE_URL}/invocations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': process.env.REACT_APP_API_KEY || 'demo-key'
+        },
+        body: JSON.stringify(testData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setPredictionResult(result);
+      } else {
+        setPredictionResult({ error: 'Failed to get prediction' });
+      }
+    } catch (error) {
+      setPredictionResult({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="App">
+      <header className="app-header">
+        <h1>Healthcare ML Model API</h1>
+        <p>Prior Authorization Prediction Service</p>
+      </header>
+
+      <div className="status-section">
+        <h2>API Status</h2>
+        {apiHealth ? (
+          <div className={`status-badge ${apiHealth.status === 'healthy' ? 'healthy' : 'unhealthy'}`}>
+            {apiHealth.status === 'healthy' ? '✅ Healthy' : '❌ Unhealthy'}
+            {apiHealth.model_version && <span> | Version: {apiHealth.model_version}</span>}
+          </div>
+        ) : (
+          <div className="status-badge loading">⏳ Checking...</div>
+        )}
+      </div>
+
+      <div className="test-section">
+        <h2>Quick Test</h2>
+        <button onClick={testPrediction} disabled={loading} className="test-button">
+          {loading ? 'Testing...' : 'Test Prediction'}
+        </button>
+        
+        {predictionResult && (
+          <div className="result-box">
+            <h3>Prediction Result:</h3>
+            <pre>{JSON.stringify(predictionResult, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+
+      <div className="swagger-section">
+        <h2>API Documentation</h2>
+        <SwaggerUI 
+          spec={swaggerSpec}
+          requestInterceptor={requestInterceptor}
+          docExpansion="list"
+          defaultModelsExpandDepth={1}
+          displayRequestDuration={true}
+          tryItOutEnabled={true}
+        />
+      </div>
+
+      <footer className="app-footer">
+        <p>Powered by AWS Amplify | ML Model API v1.0</p>
+      </footer>
+    </div>
+  );
+}
+
+export default App;
