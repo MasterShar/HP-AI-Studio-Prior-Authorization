@@ -1,0 +1,219 @@
+# ------------------------ Imports ------------------------
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import mlflow
+import mlflow.sklearn
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import LabelEncoder
+from mlflow.models import infer_signature
+
+# ------------------------ Load Data ------------------------
+# --- Local file imported into AI Studio --------------------
+file_path = "Health_Plan_Prior_Authorization_Data_20250505 for Hackathon.csv"
+df = pd.read_csv(file_path)
+
+# ------------------------ Basic Data Cleaning ------------------------
+numeric_columns = [
+    "Approval rate",
+    "Initially denied then approved - approval rate",
+    "Expedited - Avg response time",
+    "Standard - Avg response time",
+    "Extenuating circumstances - Avg response time",
+    "Number of requests per code"
+]
+
+for col in numeric_columns:
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+df.dropna(subset=["Approval rate"], inplace=True)
+
+# ------------------------ EDA ------------------------
+# Approval distribution
+sns.histplot(df["Approval rate"], bins=20, kde=True)
+plt.title("Approval Rate Distribution")
+plt.xlabel("Approval Rate")
+plt.ylabel("Frequency")
+plt.show()
+
+# Average approval rate by carrier
+carrier_approval = df.groupby("Carrier")["Approval rate"].mean().reset_index()
+sns.barplot(data=carrier_approval, x="Approval rate", y="Carrier")
+plt.title("Average Approval Rate by Carrier")
+plt.show()
+
+# Approval rate trend by year
+yearly_approval = df.groupby("Year")["Approval rate"].mean().reset_index()
+sns.lineplot(data=yearly_approval, x="Year", y="Approval rate")
+plt.title("Approval Rate Over Years")
+plt.show()
+
+# Approval vs Number of Requests - Linear Regression
+df_lr = df[["Number of requests per code", "Approval rate"]].dropna()
+X_lr = df_lr[["Number of requests per code"]]
+y_lr = df_lr["Approval rate"]
+
+lin_reg = LinearRegression()
+lin_reg.fit(X_lr, y_lr)
+y_pred_lr = lin_reg.predict(X_lr)
+
+plt.scatter(X_lr, y_lr, label='Actual', alpha=0.6)
+plt.plot(X_lr, y_pred_lr, color='red', label='Linear Fit')
+plt.title("Linear Regression: Approval Rate vs. Number of Requests")
+plt.xlabel("Number of Requests")
+plt.ylabel("Approval Rate")
+plt.legend()
+plt.show()
+
+# Approval/Disapproval breakdown by service category
+df["Approval outcome"] = np.where(df["Approval rate"] >= 70, "Approved", "Denied")
+approval_breakdown = df.groupby(["Service category", "Approval outcome"]).size().unstack(fill_value=0)
+approval_breakdown.plot(kind='barh', stacked=True, figsize=(10, 8))
+plt.title("Approval vs Denial Counts by Service Category")
+plt.xlabel("Number of Requests")
+plt.ylabel("Service Category")
+plt.legend(title="Outcome")
+plt.tight_layout()
+plt.show()
+
+# ------------------------ Request Volume and Rates by Code & Description ------------------------
+code_summary = df.groupby(["Code", "Description of service"]).agg(
+    total_requests=("Number of requests per code", "sum"),
+    mean_approval_rate=("Approval rate", "mean")
+).reset_index().sort_values(by="total_requests", ascending=False).head(15)
+
+plt.figure(figsize=(12, 8))
+sns.barplot(data=code_summary, y="Description of service", x="total_requests", hue="mean_approval_rate", palette="coolwarm")
+plt.title("Top 15 Services by Request Volume and Their Approval Rates")
+plt.xlabel("Total Requests")
+plt.ylabel("Service Description")
+plt.legend(title="Mean Approval Rate")
+plt.tight_layout()
+plt.show()
+
+# ------------------------ Correlation of Service/Description by Requests and Carriers ------------------------
+service_carrier_matrix = df.groupby(["Description of service", "Carrier"]).agg(
+    total_requests=("Number of requests per code", "sum")
+).reset_index()
+
+pivot_table = service_carrier_matrix.pivot(index="Description of service", columns="Carrier", values="total_requests").fillna(0)
+
+# Compute correlation matrix across carriers
+correlation_matrix = pivot_table.corr()
+
+plt.figure(figsize=(10, 8))
+sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", center=0)
+plt.title("Correlation of Request Volumes Between Carriers by Service Description")
+plt.tight_layout()
+plt.show()
+
+# ------------------------ Feature Engineering ------------------------
+features = [
+    "Carrier", "Year", "Service category", "Request", "Code type",
+    "Number of requests per code"
+]
+target = "Approval rate"
+
+# Encode categoricals
+df_model = df[features + [target]].copy()
+categorical_cols = ["Carrier", "Service category", "Request", "Code type"]
+
+for col in categorical_cols:
+    df_model[col] = df_model[col].astype(str).fillna("Unknown")
+    df_model[col] = LabelEncoder().fit_transform(df_model[col])
+
+# Final cleanup
+df_model.dropna(inplace=True)
+
+X = df_model.drop(columns=[target])
+y = df_model[target]
+
+# ------------------------ Model Training with MLflow ------------------------
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+
+with mlflow.start_run():
+    model.fit(X_train, y_train)
+    predictions = model.predict(X_test)
+    mse = mean_squared_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
+
+    # Log to MLflow
+    signature = infer_signature(X_test, predictions)
+    mlflow.log_params({"n_estimators": 100, "random_state": 42})
+    mlflow.log_metrics({"mse": mse, "r2": r2})
+    mlflow.sklearn.log_model(
+        sk_model=model,
+        artifact_path="rf-pa-approval",
+        signature=signature,
+        registered_model_name="pa_approval_predictor"
+    )
+
+print("MSE:", mse)
+print("R²:", r2)
+
+import torch
+import torch.nn as nn
+import mlflow.pytorch
+
+# Set seed and device
+torch.manual_seed(42)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Define PyTorch model
+class TabularNN(nn.Module):
+    def __init__(self, input_dim):
+        super(TabularNN, self).__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+
+# Prepare data safely
+X_train_tensor = torch.tensor(X_train.values, dtype=torch.float32).to(device)
+y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).reshape(-1, 1).to(device)
+
+X_test_tensor = torch.tensor(X_test.values, dtype=torch.float32).to(device)
+y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).reshape(-1, 1).to(device)
+
+# Initialize model, criterion, optimizer
+model = TabularNN(X_train.shape[1]).to(device)
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+# ------------------------ Training with MLflow ------------------------
+with mlflow.start_run():
+    model.train()
+    for epoch in range(100):
+        optimizer.zero_grad()
+        outputs = model(X_train_tensor)
+        loss = criterion(outputs, y_train_tensor)
+        loss.backward()
+        optimizer.step()
+        if epoch % 10 == 0:
+            print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
+
+    model.eval()
+    with torch.no_grad():
+        preds = model(X_test_tensor).view(-1).cpu().numpy()
+        mse = mean_squared_error(y_test, preds)
+        r2 = r2_score(y_test, preds)
+
+    # Log to MLflow
+    mlflow.log_param("epochs", 100)
+    mlflow.log_metric("mse", mse)
+    mlflow.log_metric("r2", r2)
+    mlflow.pytorch.log_model(model, "tabular-pytorch")
+
+print("[PyTorch NN] MSE:", mse)
+print("[PyTorch NN] R²:", r2)
