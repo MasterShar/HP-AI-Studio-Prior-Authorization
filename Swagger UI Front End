@@ -85,3 +85,85 @@
 </body>
 </html>
 </html>
+=======
+// This is a minimal React UI to send POST requests to your Swagger MLflow API
+// Replace `http://localhost:53933/invocations` with your deployed endpoint
+
+import React, { useState } from 'react';
+
+export default function App() {
+  const [formData, setFormData] = useState({
+    Carrier: 0,
+    Year: 2023,
+    "Service category": 0,
+    Request: 0,
+    "Code type": 0,
+    "Number of requests per code": 1
+  });
+
+  const [result, setResult] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: Number(value) }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const payload = {
+      inputs: {
+        Carrier: [formData.Carrier],
+        Year: [formData.Year],
+        "Service category": [formData["Service category"]],
+        Request: [formData.Request],
+        "Code type": [formData["Code type"]],
+        "Number of requests per code": [formData["Number of requests per code"]]
+      },
+      params: {}
+    };
+
+    try {
+      const response = await fetch('http://localhost:53933/invocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      setResult(data);
+    } catch (err) {
+      setResult({ error: err.message });
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">PA Approval Prediction</h1>
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        {Object.entries(formData).map(([key, val]) => (
+          <div key={key}>
+            <label className="block font-semibold mb-1">{key}</label>
+            <input
+              type="number"
+              name={key}
+              value={val}
+              onChange={handleChange}
+              className="w-full border p-2 rounded"
+            />
+          </div>
+        ))}
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Predict
+        </button>
+      </form>
+      {result && (
+        <div className="mt-6">
+          <h2 className="font-bold">Prediction:</h2>
+          <pre>{JSON.stringify(result, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
