@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prior Auth Model Inference</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2rem; background: #f7f7f7; }
+    .container { background: white; padding: 2rem; border-radius: 8px; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 1rem; }
+    input[type="number"], select { width: 100%; padding: 0.5rem; margin-top: 0.25rem; }
+    button { margin-top: 2rem; padding: 0.75rem 1.5rem; font-size: 1rem; background: #006eff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    pre { background: #eee; padding: 1rem; margin-top: 2rem; white-space: pre-wrap; word-wrap: break-word; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Invoke Prior Auth Prediction Model</h2>
+    <form id="predict-form">
+      <label>Carrier (encoded int): <input type="number" name="Carrier" value="1"></label>
+      <label>Year: <input type="number" name="Year" value="2024"></label>
+      <label>Service Category (encoded int): <input type="number" name="Service category" value="1"></label>
+      <label>Request (encoded int): <input type="number" name="Request" value="1"></label>
+      <label>Code Type (encoded int): <input type="number" name="Code type" value="1"></label>
+      <label>Number of Requests per Code: <input type="number" step="any" name="Number of requests per code" value="10"></label>
+      <button type="submit">Submit</button>
+    </form>
+    <pre id="response"></pre>
+  </div>
+
+  <script>
+    const form = document.getElementById("predict-form");
+    const responseBox = document.getElementById("response");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const input = {};
+      for (const [key, value] of formData.entries()) {
+        input[key] = [Number(value)];
+      }
+      const body = JSON.stringify({ inputs: input, params: {} });
+
+      try {
+        const res = await fetch("https://localhost:53933/invocations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body
+        });
+        const data = await res.json();
+        responseBox.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        responseBox.textContent = "Error: " + err;
+      }
+    });
+  </script>
+</body>
+</html>
